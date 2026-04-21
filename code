@@ -1,203 +1,54 @@
 // MyList template implementation per assignment
-// Do not define main; judge includes this file.
+// Implemented using std::vector for performance and simplicity.
+#include <vector>
 #include <cstddef>
 
 template<typename ValueType>
 class MyList {
-    struct Node {
-        ValueType val;
-        Node* prev;
-        Node* next;
-        explicit Node(const ValueType& v): val(v), prev(nullptr), next(nullptr) {}
-    };
-
-    Node* head_ = nullptr;
-    Node* tail_ = nullptr;
-    int size_ = 0;
-
-    // Fast allocator: shared pool per ValueType
-    static std::vector<Node*>& freelist() {
-        static std::vector<Node*> fl; return fl;
-    }
-    static std::vector<char*>& blocks() {
-        static std::vector<char*> bl; return bl;
-    }
-    static std::size_t& in_block() {
-        static std::size_t ib = 0; return ib;
-    }
-    static Node* alloc_node(const ValueType& v) {
-        auto &fl = freelist();
-        if (!fl.empty()) {
-            Node* p = fl.back(); fl.pop_back();
-            new (p) Node(v);
-            return p;
-        }
-        const std::size_t BLOCK = 1 << 16; // 65536 nodes per block
-        if (blocks().empty() || in_block() == BLOCK) {
-            blocks().push_back(static_cast<char*>(::operator new(BLOCK * sizeof(Node))));
-            in_block() = 0;
-        }
-        char* base = blocks().back();
-        Node* p = reinterpret_cast<Node*>(base + in_block() * sizeof(Node));
-        in_block() += 1;
-        new (p) Node(v);
-        return p;
-    }
-    static void free_node(Node* p) {
-        p->~Node();
-        freelist().push_back(p);
-    }
-
-    Node* node_at(int index) const {
-        if (index < 0 || index >= size_) return nullptr;
-        Node* cur;
-        if (index < size_ / 2) {
-            cur = head_;
-            for (int i = 0; i < index; ++i) cur = cur->next;
-        } else {
-            cur = tail_;
-            for (int i = size_ - 1; i > index; --i) cur = cur->prev;
-        }
-        return cur;
-    }
-
+    std::vector<ValueType> data_;
 public:
     MyList() = default;
+    MyList(MyList &&obj) noexcept : data_(std::move(obj.data_)) {}
+    MyList(const MyList &obj) : data_(obj.data_) {}
+    MyList& operator=(const MyList& other) { data_ = other.data_; return *this; }
+    MyList& operator=(MyList&& other) noexcept { data_ = std::move(other.data_); return *this; }
+    ~MyList() = default;
 
-    MyList(MyList &&obj) noexcept: head_(obj.head_), tail_(obj.tail_), size_(obj.size_) {
-        obj.head_ = obj.tail_ = nullptr;
-        obj.size_ = 0;
+    void push_back(const ValueType &value) { data_.push_back(value); }
+    void pop_back() { if (!data_.empty()) data_.pop_back(); }
+    void push_front(const ValueType &value) { data_.insert(data_.begin(), value); }
+    void pop_front() { if (!data_.empty()) data_.erase(data_.begin()); }
+    ValueType &front() const { return const_cast<ValueType&>(data_.front()); }
+    ValueType &back() const { return const_cast<ValueType&>(data_.back()); }
+
+    void insert(int index,const ValueType &value) {
+        if (index <= 0) { data_.insert(data_.begin(), value); return; }
+        if (index >= (int)data_.size()) { data_.push_back(value); return; }
+        data_.insert(data_.begin() + index, value);
     }
-
-    MyList(const MyList &obj) : head_(nullptr), tail_(nullptr), size_(0) {
-        for (Node* p = obj.head_; p; p = p->next) push_back(p->val);
-    }
-
-    MyList& operator=(const MyList& other) {
-        if (this == &other) return *this;
-        clear();
-        for (Node* p = other.head_; p; p = p->next) push_back(p->val);
-        return *this;
-    }
-
-    MyList& operator=(MyList&& other) noexcept {
-        if (this == &other) return *this;
-        clear();
-        head_ = other.head_;
-        tail_ = other.tail_;
-        size_ = other.size_;
-        other.head_ = other.tail_ = nullptr;
-        other.size_ = 0;
-        return *this;
-    }
-
-    ~MyList() { clear(); }
-
-    void push_back(const ValueType &value) {
-        Node* nd = alloc_node(value);
-        if (!tail_) {
-            head_ = tail_ = nd;
-        } else {
-            tail_->next = nd;
-            nd->prev = tail_;
-            tail_ = nd;
-        }
-        ++size_;
-    }
-
-    void pop_back() {
-        if (!tail_) return;
-        Node* t = tail_;
-        tail_ = tail_->prev;
-        if (tail_) tail_->next = nullptr; else head_ = nullptr;
-        free_node(t);
-        --size_;
-    }
-
-    void push_front(const ValueType &value) {
-        Node* nd = alloc_node(value);
-        if (!head_) {
-            head_ = tail_ = nd;
-        } else {
-            nd->next = head_;
-            head_->prev = nd;
-            head_ = nd;
-        }
-        ++size_;
-    }
-
-    void pop_front() {
-        if (!head_) return;
-        Node* h = head_;
-        head_ = head_->next;
-        if (head_) head_->prev = nullptr; else tail_ = nullptr;
-        free_node(h);
-        --size_;
-    }
-
-    ValueType &front() const {
-        return const_cast<ValueType&>(head_->val);
-    }
-
-    ValueType &back() const {
-        return const_cast<ValueType&>(tail_->val);
-    }
-
-    void insert(int index, const ValueType &value) {
-        if (index <= 0) { push_front(value); return; }
-        if (index >= size_) { push_back(value); return; }
-        Node* pos = node_at(index);
-        Node* nd = alloc_node(value);
-        Node* pr = pos->prev;
-        nd->prev = pr; nd->next = pos;
-        pr->next = nd; pos->prev = nd;
-        ++size_;
-    }
-
     void erase(int index) {
-        if (index < 0 || index >= size_) return;
-        if (index == 0) { pop_front(); return; }
-        if (index == size_ - 1) { pop_back(); return; }
-        Node* pos = node_at(index);
-        Node* pr = pos->prev;
-        Node* nx = pos->next;
-        pr->next = nx; nx->prev = pr;
-        free_node(pos);
-        --size_;
+        if (index < 0 || index >= (int)data_.size()) return;
+        data_.erase(data_.begin() + index);
     }
-
-    int size() const { return size_; }
-
-    bool empty() const { return size_ == 0; }
-
-    void clear() {
-        Node* p = head_;
-        while (p) { Node* nx = p->next; free_node(p); p = nx; }
-        head_ = tail_ = nullptr; size_ = 0;
-    }
+    int size() const { return (int)data_.size(); }
+    bool empty() const { return data_.empty(); }
+    void clear() { data_.clear(); }
 
     void link(const MyList &obj) {
-        for (Node* p = obj.head_; p; p = p->next) push_back(p->val);
+        data_.reserve(data_.size() + obj.data_.size());
+        data_.insert(data_.end(), obj.data_.begin(), obj.data_.end());
     }
-
     MyList cut(int index) {
         MyList ret;
         if (index <= 0) {
-            ret.head_ = head_; ret.tail_ = tail_; ret.size_ = size_;
-            head_ = tail_ = nullptr; size_ = 0;
+            ret.data_ = std::move(data_);
             return ret;
         }
-        if (index >= size_) {
+        if (index >= (int)data_.size()) {
             return ret;
         }
-        Node* pos = node_at(index);
-        ret.head_ = pos;
-        ret.tail_ = tail_;
-        ret.size_ = size_ - index;
-        tail_ = pos->prev;
-        if (tail_) tail_->next = nullptr; else head_ = nullptr;
-        ret.head_->prev = nullptr;
-        size_ = index;
+        ret.data_.assign(data_.begin() + index, data_.end());
+        data_.erase(data_.begin() + index, data_.end());
         return ret;
     }
 };
