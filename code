@@ -40,6 +40,24 @@ public:
         for (Node* p = obj.head_; p; p = p->next) push_back(p->val);
     }
 
+    MyList& operator=(const MyList& other) {
+        if (this == &other) return *this;
+        clear();
+        for (Node* p = other.head_; p; p = p->next) push_back(p->val);
+        return *this;
+    }
+
+    MyList& operator=(MyList&& other) noexcept {
+        if (this == &other) return *this;
+        clear();
+        head_ = other.head_;
+        tail_ = other.tail_;
+        size_ = other.size_;
+        other.head_ = other.tail_ = nullptr;
+        other.size_ = 0;
+        return *this;
+    }
+
     ~MyList() { clear(); }
 
     void push_back(const ValueType &value) {
@@ -150,4 +168,3 @@ public:
         return ret;
     }
 };
-
