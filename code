@@ -15,6 +15,39 @@ class MyList {
     Node* tail_ = nullptr;
     int size_ = 0;
 
+    // Fast allocator: shared pool per ValueType
+    static std::vector<Node*>& freelist() {
+        static std::vector<Node*> fl; return fl;
+    }
+    static std::vector<char*>& blocks() {
+        static std::vector<char*> bl; return bl;
+    }
+    static std::size_t& in_block() {
+        static std::size_t ib = 0; return ib;
+    }
+    static Node* alloc_node(const ValueType& v) {
+        auto &fl = freelist();
+        if (!fl.empty()) {
+            Node* p = fl.back(); fl.pop_back();
+            new (p) Node(v);
+            return p;
+        }
+        const std::size_t BLOCK = 1 << 16; // 65536 nodes per block
+        if (blocks().empty() || in_block() == BLOCK) {
+            blocks().push_back(static_cast<char*>(::operator new(BLOCK * sizeof(Node))));
+            in_block() = 0;
+        }
+        char* base = blocks().back();
+        Node* p = reinterpret_cast<Node*>(base + in_block() * sizeof(Node));
+        in_block() += 1;
+        new (p) Node(v);
+        return p;
+    }
+    static void free_node(Node* p) {
+        p->~Node();
+        freelist().push_back(p);
+    }
+
     Node* node_at(int index) const {
         if (index < 0 || index >= size_) return nullptr;
         Node* cur;
@@ -61,7 +94,7 @@ public:
     ~MyList() { clear(); }
 
     void push_back(const ValueType &value) {
-        Node* nd = new Node(value);
+        Node* nd = alloc_node(value);
         if (!tail_) {
             head_ = tail_ = nd;
         } else {
@@ -77,12 +110,12 @@ public:
         Node* t = tail_;
         tail_ = tail_->prev;
         if (tail_) tail_->next = nullptr; else head_ = nullptr;
-        delete t;
+        free_node(t);
         --size_;
     }
 
     void push_front(const ValueType &value) {
-        Node* nd = new Node(value);
+        Node* nd = alloc_node(value);
         if (!head_) {
             head_ = tail_ = nd;
         } else {
@@ -98,7 +131,7 @@ public:
         Node* h = head_;
         head_ = head_->next;
         if (head_) head_->prev = nullptr; else tail_ = nullptr;
-        delete h;
+        free_node(h);
         --size_;
     }
 
@@ -114,7 +147,7 @@ public:
         if (index <= 0) { push_front(value); return; }
         if (index >= size_) { push_back(value); return; }
         Node* pos = node_at(index);
-        Node* nd = new Node(value);
+        Node* nd = alloc_node(value);
         Node* pr = pos->prev;
         nd->prev = pr; nd->next = pos;
         pr->next = nd; pos->prev = nd;
@@ -129,7 +162,7 @@ public:
         Node* pr = pos->prev;
         Node* nx = pos->next;
         pr->next = nx; nx->prev = pr;
-        delete pos;
+        free_node(pos);
         --size_;
     }
 
@@ -139,7 +172,7 @@ public:
 
     void clear() {
         Node* p = head_;
-        while (p) { Node* nx = p->next; delete p; p = nx; }
+        while (p) { Node* nx = p->next; free_node(p); p = nx; }
         head_ = tail_ = nullptr; size_ = 0;
     }
 
