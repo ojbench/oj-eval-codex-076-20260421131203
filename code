@@ -1,0 +1,153 @@
+// MyList template implementation per assignment
+// Do not define main; judge includes this file.
+#include <cstddef>
+
+template<typename ValueType>
+class MyList {
+    struct Node {
+        ValueType val;
+        Node* prev;
+        Node* next;
+        explicit Node(const ValueType& v): val(v), prev(nullptr), next(nullptr) {}
+    };
+
+    Node* head_ = nullptr;
+    Node* tail_ = nullptr;
+    int size_ = 0;
+
+    Node* node_at(int index) const {
+        if (index < 0 || index >= size_) return nullptr;
+        Node* cur;
+        if (index < size_ / 2) {
+            cur = head_;
+            for (int i = 0; i < index; ++i) cur = cur->next;
+        } else {
+            cur = tail_;
+            for (int i = size_ - 1; i > index; --i) cur = cur->prev;
+        }
+        return cur;
+    }
+
+public:
+    MyList() = default;
+
+    MyList(MyList &&obj) noexcept: head_(obj.head_), tail_(obj.tail_), size_(obj.size_) {
+        obj.head_ = obj.tail_ = nullptr;
+        obj.size_ = 0;
+    }
+
+    MyList(const MyList &obj) : head_(nullptr), tail_(nullptr), size_(0) {
+        for (Node* p = obj.head_; p; p = p->next) push_back(p->val);
+    }
+
+    ~MyList() { clear(); }
+
+    void push_back(const ValueType &value) {
+        Node* nd = new Node(value);
+        if (!tail_) {
+            head_ = tail_ = nd;
+        } else {
+            tail_->next = nd;
+            nd->prev = tail_;
+            tail_ = nd;
+        }
+        ++size_;
+    }
+
+    void pop_back() {
+        if (!tail_) return;
+        Node* t = tail_;
+        tail_ = tail_->prev;
+        if (tail_) tail_->next = nullptr; else head_ = nullptr;
+        delete t;
+        --size_;
+    }
+
+    void push_front(const ValueType &value) {
+        Node* nd = new Node(value);
+        if (!head_) {
+            head_ = tail_ = nd;
+        } else {
+            nd->next = head_;
+            head_->prev = nd;
+            head_ = nd;
+        }
+        ++size_;
+    }
+
+    void pop_front() {
+        if (!head_) return;
+        Node* h = head_;
+        head_ = head_->next;
+        if (head_) head_->prev = nullptr; else tail_ = nullptr;
+        delete h;
+        --size_;
+    }
+
+    ValueType &front() const {
+        return const_cast<ValueType&>(head_->val);
+    }
+
+    ValueType &back() const {
+        return const_cast<ValueType&>(tail_->val);
+    }
+
+    void insert(int index, const ValueType &value) {
+        if (index <= 0) { push_front(value); return; }
+        if (index >= size_) { push_back(value); return; }
+        Node* pos = node_at(index);
+        Node* nd = new Node(value);
+        Node* pr = pos->prev;
+        nd->prev = pr; nd->next = pos;
+        pr->next = nd; pos->prev = nd;
+        ++size_;
+    }
+
+    void erase(int index) {
+        if (index < 0 || index >= size_) return;
+        if (index == 0) { pop_front(); return; }
+        if (index == size_ - 1) { pop_back(); return; }
+        Node* pos = node_at(index);
+        Node* pr = pos->prev;
+        Node* nx = pos->next;
+        pr->next = nx; nx->prev = pr;
+        delete pos;
+        --size_;
+    }
+
+    int size() const { return size_; }
+
+    bool empty() const { return size_ == 0; }
+
+    void clear() {
+        Node* p = head_;
+        while (p) { Node* nx = p->next; delete p; p = nx; }
+        head_ = tail_ = nullptr; size_ = 0;
+    }
+
+    void link(const MyList &obj) {
+        for (Node* p = obj.head_; p; p = p->next) push_back(p->val);
+    }
+
+    MyList cut(int index) {
+        MyList ret;
+        if (index <= 0) {
+            ret.head_ = head_; ret.tail_ = tail_; ret.size_ = size_;
+            head_ = tail_ = nullptr; size_ = 0;
+            return ret;
+        }
+        if (index >= size_) {
+            return ret;
+        }
+        Node* pos = node_at(index);
+        ret.head_ = pos;
+        ret.tail_ = tail_;
+        ret.size_ = size_ - index;
+        tail_ = pos->prev;
+        if (tail_) tail_->next = nullptr; else head_ = nullptr;
+        ret.head_->prev = nullptr;
+        size_ = index;
+        return ret;
+    }
+};
+
